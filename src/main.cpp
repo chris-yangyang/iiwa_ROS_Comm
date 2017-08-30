@@ -18,6 +18,7 @@
 #include "std_msgs/MultiArrayDimension.h"
 
 #include "std_msgs/Float64MultiArray.h"
+#include "normal_surface_calc/targetPoints.h"
 
 #include <iostream>
 #include <cstdlib>
@@ -34,11 +35,11 @@
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/thread/thread.hpp>
  #include <boost/asio.hpp>
-
+#include <geometry_msgs/Point32.h>
 
 #define BUFLEN 1024  //Max length of buffer
 #define PORT "12358"   //The port on which to listen for incoming data
-#define UDP_SERVER_IP "172.31.1.147"//define the udp server ip address  //"127.0.0.1" "172.31.1.147"/
+#define UDP_SERVER_IP "172.31.1.148"//define the udp server ip address  //"127.0.0.1" "172.31.1.147"/
 
 using boost::asio::ip::udp;
 
@@ -50,20 +51,15 @@ using namespace std;
 boost::asio::io_service io_service;
 
 udp::socket s(io_service, udp::endpoint(udp::v4(), 0));
-ros::Publisher pubTask;
+//ros::Publisher pubTask;
+//store the previous target points
+std::vector<geometry_msgs::Point32> position;
+std::vector<geometry_msgs::Point32> normals;
+udp::resolver::iterator iterator;
+int data_size=0;
+string endTag="@l@";
+double differThreshold=0.05;
 
-std::vector<cv::Point3d> pts_marker;
-std::vector<cv::Point3d> pts_robot;
-std::vector< std::vector<double> > pose_marker;
-std::vector< std::vector<double> > pose_robot;
-double markerX;
-double markerY;
-double markerZ;
-double markerQx;
-double markerQy;
-double markerQz;
-double markerQw;
-bool markerValid=false;
 void die(char *s)
 {
     perror(s);
@@ -75,15 +71,6 @@ string double2str(double d)
   std::ostringstream d2str;
   d2str<<d;
   return d2str.str();
-}
-
-string constructCorrsPtsStr(cv::Point3d kinectPoint, cv::Point3d robotPoint, std::vector<double> poseMarker, std::vector<double> poseRobot)
-{
-  return double2str(kinectPoint.x)+","+double2str(kinectPoint.y)+","+double2str(kinectPoint.z)+","+
-         double2str(poseMarker[0])+","+double2str(poseMarker[1])+","+double2str(poseMarker[2])+","+double2str(poseMarker[3])+","+
-         double2str(robotPoint.x)+","+double2str(robotPoint.y)+","+double2str(robotPoint.z)+","+
-	double2str(poseRobot[0])+","+double2str(poseRobot[1])+","+double2str(poseRobot[2])+","+double2str(poseRobot[3])+
-	"\r\n";
 }
 
  std::vector<float> convert2Float(std::vector<double> v)
@@ -132,142 +119,96 @@ std::vector< string > fromString2ArrayStr(string inStr)
    return vd;
 }
 
-void ar_pose_marker_callback(ar_track_alvar_msgs::AlvarMarkers req)
- {
-   size_t ll=sizeof(req.markers[0]);
+string constructSinglePointStr(geometry_msgs::Point32 pt)
+{
+  return double2str(pt.x)+","+double2str(pt.y)+","+double2str(pt.z);
+}
 
-   int sizemarker=req.markers.size();
+double sumPositionPoints()
+{
+  double rtd=0;
+  size_t pointNumber=position.size();
+  for(int i=0;i<pointNumber;i++)
+    rtd +=position[i].x+position[i].y+position[i].z;
+  return rtd;
+}
 
-   if(!req.markers.empty())
-   {
-      for(int i=0;i<sizemarker;i++)
-      {
-	ar_track_alvar_msgs::AlvarMarker marker=req.markers[i];
-	int id=marker.id;
-	int con=marker.confidence;
-	geometry_msgs::Pose pose=marker.pose.pose;
-	geometry_msgs::Point position=pose.position;
-	// tf::Quaternion q(marker.pose.pose.orientation.x, marker.pose.pose.orientation.y, marker.pose.pose.orientation.z, marker.pose.pose.orientation.w);
-	markerValid=false;
-	switch(id)
-	{
-	  case 3:
-	    markerX=position.x;
-	    markerY=position.y;
-	    markerZ=position.z;
-	    markerQx=pose.orientation.x;
-	    markerQy=pose.orientation.y;
-	    markerQz=pose.orientation.z;
-	    markerQw=pose.orientation.w;
+bool checkNAN(const normal_surface_calc::targetPoints::ConstPtr& msg)
+{
+  bool rtb=false;
+  for (int i = 0; i < msg->path_robot.size(); i++) {
+    if(isnan(msg->path_robot[i].x)||isnan(msg->path_robot[i].y)||isnan(msg->path_robot[i].z))
+        rtb=true;
+    if(isnan(msg->normals_robot[i].x)||isnan(msg->normals_robot[i].y)||isnan(msg->normals_robot[i].z))
+        rtb=true;
+  }
+  return rtb;
+}
 
-	    markerValid=true;
-	    break;
-	}
-      }
+void path_dataCallback(const normal_surface_calc::targetPoints::ConstPtr& msg)
+{
+  udp::resolver resolver(io_service);
+  udp::resolver::query query(udp::v4(), UDP_SERVER_IP , PORT);
+  udp::resolver::iterator iterator = resolver.resolve(query);
+
+  double currentPositionSum=sumPositionPoints();
+  position.resize(msg->path_robot.size());
+  normals.resize(msg->path_robot.size());
+  string sendback_cmd="Seq_Points:";
+  std::cout<<"topic received!"<<endl;
+  //if(!checkNAN(msg))
+  {
+    for (int i = 0; i < msg->path_robot.size(); i++) {
+        position[i].x=msg->path_robot[i].x;
+        position[i].y=msg->path_robot[i].y;
+        position[i].z=msg->path_robot[i].z;
+
+        normals[i].x=msg->normals_robot[i].x;
+        normals[i].y=msg->normals_robot[i].y;
+        normals[i].z=msg->normals_robot[i].z;
+        if(i==msg->path_robot.size()-1)
+          sendback_cmd +=constructSinglePointStr(msg->path_robot[i])+","+constructSinglePointStr(msg->normals_robot[i]);
+        else
+          sendback_cmd +=constructSinglePointStr(msg->path_robot[i])+","+constructSinglePointStr(msg->normals_robot[i])+",";
+    }
+    std::cout<<"topic received! no NAN."<<endl;
+  }
+  data_size=msg->path_robot.size();
+  sendback_cmd+=endTag;
+  double newPositionSum=sumPositionPoints();
+  if(abs(currentPositionSum-newPositionSum)>differThreshold)
+  {
+    std::cout<<"new path drawing task detected!"<<endl;
+  //  std::cout<<normals<<endl;
+     try {
+       //get robot position x,y,z
+       int myArrayLength=sendback_cmd.size();
+       char myArray[myArrayLength];//as 1 char space for null is also required
+       strcpy(myArray, sendback_cmd.c_str());
+       std::cout << "new path drawing task published!  "<<sendback_cmd<<endl;
+       s.send_to(boost::asio::buffer(myArray, myArrayLength), *iterator);
+       std::cout<<"a new task has been assigned!"<<endl;
+     }
+     catch(exception &e) {
+      std::cout << "Catch an exception: " << e.what() << std::endl;
    }
  }
-
-void add_marker_position()
-{
-  std::cout << "get marker posotion:  "<<markerX<<","<<markerY<<","<<markerZ<<","<<markerQx<<","<<markerQy<<","<<markerQz<<","<<markerQw<<endl;
-  cv::Point3d currentMarker(markerX,markerY,markerZ);
-  pts_marker.push_back(currentMarker);
-  std::vector<double> currentMarkerPose;
-  currentMarkerPose.push_back(markerQx);
-  currentMarkerPose.push_back(markerQy);
-  currentMarkerPose.push_back(markerQz);
-  currentMarkerPose.push_back(markerQw);
-  pose_marker.push_back(currentMarkerPose);
 }
 
-void resolvRobotPosition()
-{
-  char in_reply[max_length];
-  udp::endpoint sender_endpoint;
-  size_t reply_length = s.receive_from(boost::asio::buffer(in_reply, max_length), sender_endpoint);
-  std::cout << "Reply is: "; std::cout.write(in_reply, reply_length); std::cout << "\n";
 
-  if(reply_length>0)
-  {
-    char readfrom[reply_length];
-    for(int i=0;i<reply_length;i++)
-    readfrom[i]=in_reply[i];
-    string inStr(readfrom);
-    std::cout << "msg received:  "+inStr<<endl;
-    if (packageValid(inStr))//get the robot position
-    {
-        int endIndex=inStr.find("@l@");
-        string strTemp=inStr.substr(0,endIndex);
-        //split string to doubles
-        //cout<<strTemp<<endl;
-        std::vector< double > positions= fromString2Array(strTemp);
-        //printOutStdVector(positions);
-        cv::Point3d currentRobot(positions[0]/1000,positions[1]/1000,positions[2]/1000);
-        pts_robot.push_back(currentRobot);
-        std::vector<double> currentRobotPose;
-        currentRobotPose.push_back(positions[3]);
-        currentRobotPose.push_back(positions[4]);
-        currentRobotPose.push_back(positions[5]);
-        currentRobotPose.push_back(positions[6]);
-        pose_robot.push_back(currentRobotPose);
-
-        cout<<"robot position:"<<currentRobot<<endl;
-        cout<<"robot pose:";
-        printOutStdVector(currentRobotPose);
-        
-    }
-  }
-}
 //"[0.53196,1.39524,1.09715,0.955755,-4.0458,-1.292023,-0.000904]"
 //"[0.1037,1.167,1.3004,1.27976,-4.7181,-1.54276,-0.0039043]"
 
-void publish_ctPoints()
-{
-  size_t cptsNumber=pts_robot.size();
-  cout<<"publish correspondent point topic: /chris/control_pts"<<endl;
-  std_msgs::Float64MultiArray corrsPts;
-
-  for(int m=0;m<cptsNumber;m++)
-  {
-    corrsPts.data.push_back(pts_marker[m].x);
-    corrsPts.data.push_back(pts_marker[m].y);
-    corrsPts.data.push_back(pts_marker[m].z);
-    corrsPts.data.push_back(pose_marker[m][0]);
-    corrsPts.data.push_back(pose_marker[m][1]);
-    corrsPts.data.push_back(pose_marker[m][2]);
-    corrsPts.data.push_back(pose_marker[m][3]);
-
-    corrsPts.data.push_back(pts_robot[m].x);
-    corrsPts.data.push_back(pts_robot[m].y);
-    corrsPts.data.push_back(pts_robot[m].z);
-    
-    corrsPts.data.push_back(pose_robot[m][0]);
-    corrsPts.data.push_back(pose_robot[m][1]);
-    corrsPts.data.push_back(pose_robot[m][2]);
-    corrsPts.data.push_back(pose_robot[m][3]);
-  }
-  pubTask.publish(corrsPts);
-  ROS_INFO("control points coordinates published!");
-}
-
 int main(int argc, char **argv )
 {
-    udp::resolver resolver(io_service);
-    udp::resolver::query query(udp::v4(), UDP_SERVER_IP , PORT);
-    udp::resolver::iterator iterator = resolver.resolve(query);
-
-    markerValid=false;
     //initialize the ROS system and become a node.
     ros::init(argc, argv, "path_drawer");
     ros::NodeHandle nh;
-    ros::Subscriber sub = nh.subscribe("/ar_pose_marker", 1000, ar_pose_marker_callback);
-    //ros::Subscriber subP = nh.subscribe("/chris_tracker/currentPoint", 1000, currentPointCallback);
-    //ros::Subscriber subPd = nh.subscribe("/chris_tracker/desiredPoint", 1000, desiredPointCallback);
-    pubTask = nh.advertise<std_msgs::Float64MultiArray>("/chris/controlPoints", 1, true);
+    ros::Subscriber sub = nh.subscribe("/targetPoints", 1, path_dataCallback);
 
     //ros::ServiceClient Joint_move_client = nh.serviceClient<wam_srvs::JointMove>("/zeus/wam/joint_move");
-    cout << "Press any key to continue..." << endl;
-    getchar();
+    //cout << "Press any key to continue..." << endl;
+    //getchar();
      // Joint_move_client.call(mv_srv);///////////////////////////////////////////////////
 
     // cout << "Press any key to continue the servoing loop..." << endl;
@@ -281,134 +222,6 @@ int main(int argc, char **argv )
 
        try {
 
-	  std::cout << "Enter command: ";
-	  char request[max_length];
-	  std::cin.getline(request, max_length);
-	  size_t request_length = strlen(request);
-	  string str(request);
-	  //std::cout << "you typed:  "+str<<endl;
-
-	  if(str.find("esc") != std::string::npos)
-	  {
-	    done=true;
-	    break;
-	  }
-
-	  if(str.find("close connection") != std::string::npos)
-	  {
-	    std::string closeConnectionCmd = "esc";
-	    int myArrayLength=closeConnectionCmd.size();
-            char myArray[myArrayLength];//as 1 char space for null is also required
-            strcpy(myArray, closeConnectionCmd.c_str());
-	    std::cout << "close robot connection command:  "<<closeConnectionCmd<<endl;
-
-	    s.send_to(boost::asio::buffer(myArray, myArrayLength), *iterator);
-	  }
-
-	  if(str.find("init") != std::string::npos)
-	  {
-	    std::string Cmd = "init";
-	    int myArrayLength=Cmd.size();
-            char myArray[myArrayLength];//as 1 char space for null is also required
-            strcpy(myArray, Cmd.c_str());
-	    std::cout << "initialize command:  "<<Cmd<<endl;
-
-	    s.send_to(boost::asio::buffer(myArray, myArrayLength), *iterator);
-	  }
-
-	  if(str.find("move") != std::string::npos)
-	  {
-	    //get marker position x, y, z
-	    
-	    //send robot to the position and get robot cartesian coordinates
-	    std::string Cmd = str;
-	    int myArrayLength=Cmd.size();
-	    char myArray[myArrayLength];//as 1 char space for null is not required
-	    strcpy(myArray, Cmd.c_str());
-	    std::cout << "command: "+ str <<Cmd<<endl;
-	    s.send_to(boost::asio::buffer(myArray, myArrayLength), *iterator);
-	    std::cout << "move position command sent:  "+ str <<Cmd<<endl;
-	    //wait for reply
-            
-	    resolvRobotPosition();
-	    boost::this_thread::sleep(boost::posix_time::milliseconds(1000));
-	    ros::spinOnce();
-	    if(!markerValid)
-	    {
-	      cout<<"marker detection failed, please check marker position!"<<endl;
-	      //clear previous added robot positions
-	      pts_robot.pop_back();
-	      pose_robot.pop_back();
-	      cout<<"current robot position discarded!"<<endl;
-	      continue;
-	    }
-	    add_marker_position();
-	    cout<<"control point pairs number:"<<pts_robot.size()<<endl;  
-	    publish_ctPoints();
-	  }
-
-	  if(str.find("mark") != std::string::npos)//mark as one control point
-	  {
-	    ros::spinOnce();
-	    if(!markerValid)
-	    {
-	      cout<<"marker detection failed, please check marker position!"<<endl;
-	      continue;
-	    }
-	    //get marker position x, y, z
-            add_marker_position();
-
-	    //get robot position x,y,z
-	    std::string getRobotCartPositionCmd = "get_Cart_Position@l@";
-	    int myArrayLength=getRobotCartPositionCmd.size();
-	    char myArray[myArrayLength];//as 1 char space for null is also required
-	    strcpy(myArray, getRobotCartPositionCmd.c_str());
-	    std::cout << "get robot position:  "<<getRobotCartPositionCmd<<endl;
-
-	    s.send_to(boost::asio::buffer(myArray, myArrayLength), *iterator);
-
-	    std::cout<<"get robot position cmd sent!"<<endl;
-	    //receive position from robot
-	    resolvRobotPosition();
-	    cout<<"control point pairs number:"<<pts_robot.size()<<endl;
-	    publish_ctPoints();
-	  }
-
-	  if(str.find("done") != std::string::npos)//mark as one control point
-	  {
-	    //publish control points
-	    cout<<"control point pairs number:"<<pts_marker.size()<<endl;
-// 	    cout<<"markers:"<<pts_marker<<endl;
-// 	    cout<<"robots:"<<pts_robot<<endl;
-
-	    cout<<"write to file result.txt"<<endl;
-	    ofstream file;
-	    file.open("result.txt");
-
-	    size_t cptsNumber=pts_robot.size();
-	    for(int m=0;m<cptsNumber;m++)
-	      file<<constructCorrsPtsStr(pts_marker[m],pts_robot[m], pose_marker[m], pose_robot[m]);
-	    file.close();
-	    
-	    publish_ctPoints();
-	    	    
-	    pts_robot.clear();
-	    pts_marker.clear();
-	    pose_marker.clear();
-	    pose_robot.clear();
-	  }
-
-	  if(str.find("clear") != std::string::npos)//mark as one control point
-	  {
-	    pts_robot.pop_back();
-	    pts_marker.pop_back();
-	    pose_marker.pop_back();
-	    pose_robot.pop_back();
-	    cout<<"this point pair deleted"<<endl;
-	    cout<<"control point pairs number:"<<pts_robot.size()<<endl;
-	  }
-
-          boost::this_thread::sleep(boost::posix_time::milliseconds(200));
        }
       catch(exception &e) {
           std::cout << "Catch an exception: " << e.what() << std::endl;
