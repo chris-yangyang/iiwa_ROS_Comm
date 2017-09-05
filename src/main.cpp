@@ -107,15 +107,7 @@ bool packageValid(string inputStr)
      return false;
 }
 
- std::vector< double > fromString2Array(string inStr)
-{
-    std::vector< double > vd;
-    string buf; // Have a buffer string
-    stringstream ss(inStr); // Insert the string into a stream
-    while (ss >> buf)
-        vd.push_back(atof(buf.c_str()));
-    return vd;
-}
+
 
 std::vector< string > fromString2ArrayStr(string inStr)
 {
@@ -127,6 +119,19 @@ std::vector< string > fromString2ArrayStr(string inStr)
    return vd;
 }
 
+/**1 2 3 4 5 splitor: space
+* input string 1 2 3 4 5 6
+output array [1,2,3,4,5,6]
+*/
+std::vector< double > fromString2Array(string inStr)
+{
+   std::vector< double > vd;
+   string buf; // Have a buffer string
+   stringstream ss(inStr); // Insert the string into a stream
+   while (ss >> buf)
+       vd.push_back(atof(buf.c_str()));
+   return vd;
+}
 // string constructSinglePointStr(geometry_msgs::Point32 pt)
 // {
 //   return double2str(pt.x)+","+double2str(pt.y)+","+double2str(pt.z);
@@ -190,19 +195,7 @@ std::vector<string> split(const std::string &s, char delim) {
     return elems;
 }
 
-/**1 2 3 4 5 splitor: space
-* input string 1 2 3 4 5 6
-output array [1,2,3,4,5,6]
-*/
-std::vector< double > fromString2Array(string inStr)
-{
-   std::vector< double > vd;
-   string buf; // Have a buffer string
-   stringstream ss(inStr); // Insert the string into a stream
-   while (ss >> buf)
-       vd.push_back(atof(buf.c_str()));
-   return vd;
-}
+
 
 
 
@@ -227,11 +220,11 @@ void path_dataCallback(const normal_surface_calc::targetPoints::ConstPtr& msg)
     //     else
     //       sendback_cmd +=constructSinglePointStr(position[i])+","+constructSinglePointStr(normals[i])+",";
         sendback_cmd=constructPubStr(ps, ns);
-    }
+
     //std::cout<<"topic received! no NAN."<<endl;
   }
 
-  sendback_cmd+=endTag;
+  sendback_cmd +=endTag;
   double newPositionSum=sumPositionPoints();
   if(abs(currentPositionSum-newPositionSum)>differThreshold)
   {
@@ -264,13 +257,13 @@ void signature_data_callback(const std_msgs::String::ConstPtr& msg)
     if(strokesNum>0)
     {
         vPtSignature.clear();
-        vector<vector<Point> >().swap(vPtSignature);
+        vector<vector<Point2d> >().swap(vPtSignature);
         for(int i=0;i<strokesNum;i++)
         {
           string thisStroke=strokeStrs[i];
           vector<double> points=fromString2Array(thisStroke);
           size_t pointNum=points.size()/2;
-          vector<Point> strokePoints;
+          vector<Point2d> strokePoints;
           for(int j=0;j<pointNum;j++)
               strokePoints.push_back(Point2d(points[2*j],points[2*j+1]));
           vPtSignature.push_back(strokePoints);
@@ -299,16 +292,19 @@ int main(int argc, char **argv )
     ///  getchar();
     ros::Rate loop_rate(3);//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     bool done=false;
+    //cout<<"press esc to quit."<<endl;
     cout << "UDP client is trying to connect to ...."<< UDP_SERVER_IP<<":"<<PORT<< endl;
+    int keyPress;
     while(ros::ok()&&!done)
     {
       ros::spinOnce();
-      keyPress = cvWaitKey(1)&255;
-    //  cout<<(keyPress)<<endl;
-      if(27 == keyPress){//"Esc"
-         done=true;
-         break;
-       }
+    //   keyPress = cvWaitKey(1)&255;
+    // //  cout<<(keyPress)<<endl;
+    //   if(27 == keyPress){//"Esc"
+    //      ROS_INFO_STREAM("quit app.");
+    //      done=true;
+    //      break;
+    //    }
        try {
 
        }
