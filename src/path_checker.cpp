@@ -11,7 +11,16 @@ path_checker::path_checker(const normal_surface_calc::targetPoints::ConstPtr& _m
 }
 
 path_checker::~path_checker(){}
-
+path_checker::path_checker(const normal_surface_calc::targetPoints::ConstPtr& _msg, vector< vector <Point2d> > _inputPoints)
+{
+  msg=_msg;
+  size_t pointNum=msg->path_robot.size();
+  strokes=_inputPoints;
+  strokeIndex=getStrokeIndex();
+ //  for(int i=0;i<pointNum;i++)
+ //     validIndex.push_back(i);
+  processNANs();
+}
 vector<Point3d> path_checker::getPathPositions()
 {
   //TODO do some processNANs
@@ -19,6 +28,42 @@ vector<Point3d> path_checker::getPathPositions()
   for(int i=0;i<validPointNum;i++)
         path_positions.push_back(Point3d(msg->path_robot[validIndex[i]].x, msg->path_robot[validIndex[i]].y, msg->path_robot[validIndex[i]].z));
   return  path_positions;
+}
+
+/**get points in strokes structure.
+*/
+vector< vector <Point3d> > path_checker::getStrokesPathPositions()
+{
+  vector< vector <Point3d> > rtvects;
+  size_t strokesNum=strokes.size();
+  //initialize
+  rtvects.resize(strokesNum);
+
+  size_t validPointNum=validIndex.size();
+  for(int i=0;i<validPointNum;i++)
+  {
+      Point3d thisPoint(msg->path_robot[validIndex[i]].x, msg->path_robot[validIndex[i]].y, msg->path_robot[validIndex[i]].z);
+      int thisStroke=getPointOfStrokeIndex(validIndex[i]);
+      rtvects[thisStroke].push_back(thisPoint);
+  }
+
+  return  rtvects;
+}
+
+/**return the stroke index that this point is in.
+default, return 0
+*/
+int path_checker::getPointOfStrokeIndex(int pointIndex)
+{
+    //vector< Point> strokeIndex;
+    size_t strokesNum=strokeIndex.size();
+    for(int i=0;i<strokesNum;i++)
+    {
+      Point strokeStartEnd=strokeIndex[i];
+      if(pointIndex>=strokeStartEnd.x&&pointIndex<=strokeStartEnd.y)
+          return i;
+    }
+    return 0;
 }
 
 vector<Point3d> path_checker::getNormalVects()
@@ -40,6 +85,50 @@ vector<Point3d> path_checker::getNormalVects()
    }
 
   return path_normals;
+}
+
+/**get normals in strokes structure.
+*/
+vector< vector <Point3d> > path_checker::getStrokesNormalVects()
+{
+  vector< vector <Point3d> > rtvects;
+  size_t strokesNum=strokes.size();
+  //initialize
+  rtvects.resize(strokesNum);
+
+  size_t validPointNum=validIndex.size();
+   for(int i=0;i<validPointNum;i++)
+   {
+     Point3d thisPoint(0,0,0);
+     if(flags[validIndex[i]]==1)
+         thisPoint=Point3d(msg->normals_robot[validIndex[i]].x, msg->normals_robot[validIndex[i]].y, msg->normals_robot[validIndex[i]].z);
+     else
+     {
+       int left1Index=getNearestLeft1(i);
+       int rightIndex=getNearestRight1(i);
+       double avrgX=(msg->normals_robot[left1Index].x+msg->normals_robot[rightIndex].x)/2;
+       double avrgY=(msg->normals_robot[left1Index].y+msg->normals_robot[rightIndex].y)/2;
+       double avrgZ=(msg->normals_robot[left1Index].z+msg->normals_robot[rightIndex].z)/2;
+       thisPoint=Point3d(avrgX,avrgY,avrgZ);
+     }
+     int thisStroke=getPointOfStrokeIndex(validIndex[i]);
+     rtvects[thisStroke].push_back(thisPoint);
+   }
+  return rtvects;
+}
+
+vector<Point> path_checker::getStrokeIndex()
+{
+  vector<Point> vec;
+  size_t strokesNum=strokes.size();
+  int counter=0;
+  for(int i=0;i<strokesNum;i++)
+  {
+    size_t thisStrokePointNum=strokes[i].size();
+    vec.push_back(Point(counter, counter+thisStrokePointNum-1));
+    counter+=thisStrokePointNum;
+  }
+  return vec;
 }
 
 /**the overall process
