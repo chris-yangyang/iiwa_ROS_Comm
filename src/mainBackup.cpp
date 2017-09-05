@@ -54,8 +54,8 @@ boost::asio::io_service io_service;
 udp::socket s(io_service, udp::endpoint(udp::v4(), 0));
 //ros::Publisher pubTask;
 //store the previous target points
-std::vector<Point3d> position;
-std::vector<Point3d> normals;
+std::vector<geometry_msgs::Point32> position;
+std::vector<geometry_msgs::Point32> normals;
 int data_size=0;
 string endTag="@l@";
 
@@ -124,12 +124,7 @@ std::vector< string > fromString2ArrayStr(string inStr)
    return vd;
 }
 
-// string constructSinglePointStr(geometry_msgs::Point32 pt)
-// {
-//   return double2str(pt.x)+","+double2str(pt.y)+","+double2str(pt.z);
-// }
-
-string constructSinglePointStr(cv::Point3d pt)
+string constructSinglePointStr(geometry_msgs::Point32 pt)
 {
   return double2str(pt.x)+","+double2str(pt.y)+","+double2str(pt.z);
 }
@@ -165,20 +160,28 @@ void path_dataCallback(const normal_surface_calc::targetPoints::ConstPtr& msg)
   string sendback_cmd="Seq_Points:";
  // std::cout<<"topic received!"<<endl;
   path_checker pcheck(msg);
-  position=pcheck.getPathPositions();
-  normals=pcheck.getNormalVects();
-  data_size=position.size();
-  if(data_size>0)
+  vector<Point3d> positions=pcheck.getPathPositions();
+  vector<Point3d> normalVects=pcheck.getNormalVects();
+  size_t validPointSize=positions.size();
+//  if(valid)
+  if(!checkNAN(msg))
   {
     for (int i = 0; i < msg->path_robot.size(); i++) {
-        if(i==data_size-1)
-          sendback_cmd +=constructSinglePointStr(position[i])+","+constructSinglePointStr(normals[i]);
+        position[i].x=msg->path_robot[i].x;
+        position[i].y=msg->path_robot[i].y;
+        position[i].z=msg->path_robot[i].z;
+
+        normals[i].x=msg->normals_robot[i].x;
+        normals[i].y=msg->normals_robot[i].y;
+        normals[i].z=msg->normals_robot[i].z;
+        if(i==msg->path_robot.size()-1)
+          sendback_cmd +=constructSinglePointStr(msg->path_robot[i])+","+constructSinglePointStr(msg->normals_robot[i]);
         else
-          sendback_cmd +=constructSinglePointStr(position[i])+","+constructSinglePointStr(normals[i])+",";
+          sendback_cmd +=constructSinglePointStr(msg->path_robot[i])+","+constructSinglePointStr(msg->normals_robot[i])+",";
     }
     //std::cout<<"topic received! no NAN."<<endl;
   }
-
+  data_size=msg->path_robot.size();
   sendback_cmd+=endTag;
   double newPositionSum=sumPositionPoints();
   if(abs(currentPositionSum-newPositionSum)>differThreshold)
