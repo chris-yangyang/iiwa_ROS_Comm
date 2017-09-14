@@ -214,7 +214,7 @@ void resolvRobotPosition()
         cout<<"robot position:"<<currentRobot<<endl;
         cout<<"robot pose:";
         printOutStdVector(currentRobotPose);
-        
+
     }
   }
 }
@@ -240,7 +240,7 @@ void publish_ctPoints()
     corrsPts.data.push_back(pts_robot[m].x);
     corrsPts.data.push_back(pts_robot[m].y);
     corrsPts.data.push_back(pts_robot[m].z);
-    
+
     corrsPts.data.push_back(pose_robot[m][0]);
     corrsPts.data.push_back(pose_robot[m][1]);
     corrsPts.data.push_back(pose_robot[m][2]);
@@ -319,7 +319,7 @@ int main(int argc, char **argv )
 	  if(str.find("move") != std::string::npos)
 	  {
 	    //get marker position x, y, z
-	    
+
 	    //send robot to the position and get robot cartesian coordinates
 	    std::string Cmd = str;
 	    int myArrayLength=Cmd.size();
@@ -329,7 +329,7 @@ int main(int argc, char **argv )
 	    s.send_to(boost::asio::buffer(myArray, myArrayLength), *iterator);
 	    std::cout << "move position command sent:  "+ str <<Cmd<<endl;
 	    //wait for reply
-            
+
 	    resolvRobotPosition();
 	    boost::this_thread::sleep(boost::posix_time::milliseconds(1000));
 	    ros::spinOnce();
@@ -343,7 +343,7 @@ int main(int argc, char **argv )
 	      continue;
 	    }
 	    add_marker_position();
-	    cout<<"control point pairs number:"<<pts_robot.size()<<endl;  
+	    cout<<"control point pairs number:"<<pts_robot.size()<<endl;
 	    publish_ctPoints();
 	  }
 
@@ -389,9 +389,9 @@ int main(int argc, char **argv )
 	    for(int m=0;m<cptsNumber;m++)
 	      file<<constructCorrsPtsStr(pts_marker[m],pts_robot[m], pose_marker[m], pose_robot[m]);
 	    file.close();
-	    
+
 	    publish_ctPoints();
-	    	    
+
 	    pts_robot.clear();
 	    pts_marker.clear();
 	    pose_marker.clear();

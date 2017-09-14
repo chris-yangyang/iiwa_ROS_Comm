@@ -36,17 +36,24 @@ vector< vector <Point3d> > path_checker::getStrokesPathPositions()
 {
   vector< vector <Point3d> > rtvects;
   size_t strokesNum=strokes.size();
+  if(strokesNum==0)
+     strokesNum=1;
   //initialize
+  rtvects.clear();
+  //cout<<"strokes num "<<strokesNum<<endl;
+
   rtvects.resize(strokesNum);
 
   size_t validPointNum=validIndex.size();
+//  cout<<"ss1"<<endl;
   for(int i=0;i<validPointNum;i++)
   {
       Point3d thisPoint(msg->path_robot[validIndex[i]].x, msg->path_robot[validIndex[i]].y, msg->path_robot[validIndex[i]].z);
       int thisStroke=getPointOfStrokeIndex(validIndex[i]);
+      //cout<<"ss "<<i<<endl;
       rtvects[thisStroke].push_back(thisPoint);
   }
-
+//cout<<"ss2"<<endl;
   return  rtvects;
 }
 
@@ -93,7 +100,11 @@ vector< vector <Point3d> > path_checker::getStrokesNormalVects()
 {
   vector< vector <Point3d> > rtvects;
   size_t strokesNum=strokes.size();
+  if(strokesNum==0)
+     strokesNum=1;
   //initialize
+  rtvects.clear();
+  //cout<<"strokes num "<<strokesNum<<endl;
   rtvects.resize(strokesNum);
 
   size_t validPointNum=validIndex.size();
