@@ -57,7 +57,7 @@ boost::asio::io_service io_service;
 
 
 udp::socket s(io_service, udp::endpoint(udp::v4(), 0));
-int samplingGap=10;
+int samplingGap=2;
 int maxPackageSize=1000;
 //ros::Publisher pubTask;
 //store the previous target points
@@ -70,7 +70,7 @@ udp::resolver resolver(io_service);
 udp::resolver::query query(udp::v4(), UDP_SERVER_IP , PORT);
 udp::resolver::iterator iterator4 = resolver.resolve(query);
 
-double differThreshold=0.05;
+double differThreshold=0.05 ;
 bool startPublishingFlag=false;
 
 void die(char *s)

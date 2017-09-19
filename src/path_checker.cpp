@@ -4,7 +4,7 @@
 path_checker::path_checker(const normal_surface_calc::targetPoints::ConstPtr& _msg)
 {
    msg=_msg;
-   size_t pointNum=msg->path_robot.size();
+   size_t pointNum=msg->path_robot.size() ;
   //  for(int i=0;i<pointNum;i++)
   //     validIndex.push_back(i);
    processNANs();

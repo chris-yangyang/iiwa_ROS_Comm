@@ -21,9 +21,9 @@ class path_checker
     vector<Point3d> getNormalVects();
     vector< vector <Point3d> > getStrokesPathPositions();
     vector< vector <Point3d> > getStrokesNormalVects();
-    
+
   private:
-    int detectNAN(int i);
+    int detectNAN(int i) ;
     void processNANs();
     void getFlags();
     int getNearestLeft1(int i);
